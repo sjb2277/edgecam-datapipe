@@ -21,7 +21,7 @@
 | 영역 | 이전 5G 프로젝트 | 이번 프로젝트 |
 | --- | --- | --- |
 | 수집 | 소켓으로 직접 수신 | 메시지 버스 + 스키마 레지스트리 + DLQ |
-| 저장 | InfluxDB 단일 | Hot(TimescaleDB) / Cold(MinIO Parquet) 분리 |
+| 저장 | InfluxDB 단일 | Hot(TimescaleDB) / Cold(SeaweedFS S3 Parquet) 분리 |
 | 처리 | 실시간 시각화만 | 배치 정제(dbt) + 오케스트레이션(Airflow) |
 | 신뢰성 | 확인 안 함 | 장애 주입, 멱등 적재, 재처리(replay) |
 | 품질 | 없음 | run마다 자동 품질 리포트, 격리(quarantine) |
@@ -60,12 +60,12 @@ Ubuntu 네이티브에 Docker Compose로 인프라를 띄우고, 파이프라인
 | 메시지 버스 | Redpanda (Kafka API) | Kafka, Redis Streams, MQTT | Kafka 호환 경험이 범용, 단일 바이너리에 Schema Registry 내장, 메모리 상한 지정 가능 |
 | 스키마 | pydantic(원본) → JSON Schema(생성물), confluent-kafka JSONSerializer | Avro | 초반 디버깅 쉬움, W4에 Avro 전환 여부를 ADR로 |
 | Hot 저장 | PostgreSQL + TimescaleDB | InfluxDB | SQL 조인, dbt 연동, 이전 경험과 차별 |
-| Cold 저장 | MinIO + Parquet | 로컬 폴더 | S3 API 범용성 |
+| Cold 저장 | SeaweedFS(S3 API) + Parquet | 로컬 폴더 | S3 API 범용성, 선택 근거는 ADR-0009 |
 | 분석 엔진 | DuckDB, Polars | Spark | 노트북 규모에 Spark는 과함 (이 판단도 ADR로) |
 | 변환 | dbt-core | SQL 스크립트 | 테스트, lineage, 문서 자동화 |
 | 오케스트레이션 | Airflow (LocalExecutor) | Dagster, Prefect | 채용공고 노출 빈도, 메모리는 운용으로 해결 |
 | 품질 | pandera + dbt tests | Great Expectations | 가벼움 |
-| 데이터셋 버전 | DVC (MinIO remote) | 수동 manifest | 복원 가능한 버전 |
+| 데이터셋 버전 | DVC (SeaweedFS S3 remote) | 수동 manifest | 복원 가능한 버전 |
 | API | FastAPI + WebSocket | Flask | async, OpenAPI 자동 문서 |
 | 웹 | React + Vite + TypeScript + ECharts | Streamlit, Grafana | 직접 구현 증명, Grafana는 파이프라인 운영 모니터링 전용 |
 | 장비 | ESP32 + PlatformIO (C++) | Arduino Uno | 처리 여유, 확장성 |
@@ -77,7 +77,7 @@ Ubuntu 네이티브에 Docker Compose로 인프라를 띄우고, 파이프라인
 
 | 프로파일 | 띄우는 것 | 쓰는 시점 |
 | --- | --- | --- |
-| core (상시) | Redpanda(`--memory 1G`), Postgres/Timescale, MinIO | 항상 |
+| core (상시) | Redpanda(`--memory 1G`), Postgres/Timescale, SeaweedFS | 항상 |
 | exp | core + 카메라·추론 + 링크(netem 또는 rfsim) + API·웹 | 실험 실행 |
 | batch | core + Airflow + dbt | 실험 종료 후 정제·리포트 |
 
@@ -93,7 +93,7 @@ Redpanda는 컨테이너 간 통신용 internal 리스너와 호스트 접속용
 | Schema Registry | 8081 | 18081 | |
 | Redpanda Console | 8080 | 8080 | |
 | PostgreSQL(TimescaleDB) | 5432 | 5432 | |
-| MinIO API / 콘솔 | 9000 / 9001 | 9000 / 9001 | |
+| SeaweedFS S3 / Master UI / Filer UI | 9000 / 9333 / 8888 | 9000 / 9333 / 8888 | |
 | Airflow Web | 8080 | 8085 | Console과 충돌 방지 (제안, D01에서 확정) |
 | Grafana | 3000 | 3000 | 제안, D01에서 확정 |
 | FastAPI | 8000 | 8000 | 제안, D01에서 확정 |
@@ -105,7 +105,7 @@ Redpanda는 컨테이너 간 통신용 internal 리스너와 호스트 접속용
 
 모든 이벤트는 공통 envelope을 달고 버스에 들어간 뒤 Hot, Cold 두 경로로 동시에 저장되고, run이 끝나면 배치가 silver·gold로 정제한다. Cold의 raw Parquet이 원본이라 언제든 재처리할 수 있다.
 
-데이터 흐름: 소스 4계열(카메라 송신, 엣지 수신·추론, 링크 어댑터, 장비 게이트웨이) → Redpanda 버스(Schema Registry, 실패는 DLQ) → Hot 경로(stream-loader → TimescaleDB bronze)와 Cold 경로(archiver → MinIO Parquet) → 배치 정제(Airflow DAG: pandera 검증 → reference 추론 → dbt silver·gold → 품질 리포트 → DVC 데이터셋) → FastAPI·WebSocket → React 대시보드. 엣지 컨트롤러는 라이브 이벤트를 구독해 제어 명령을 링크 너머 장비로 보낸다. replay는 Cold raw에서 bronze로 다시 적재하는 경로다.
+데이터 흐름: 소스 4계열(카메라 송신, 엣지 수신·추론, 링크 어댑터, 장비 게이트웨이) → Redpanda 버스(Schema Registry, 실패는 DLQ) → Hot 경로(stream-loader → TimescaleDB bronze)와 Cold 경로(archiver → SeaweedFS(S3) Parquet) → 배치 정제(Airflow DAG: pandera 검증 → reference 추론 → dbt silver·gold → 품질 리포트 → DVC 데이터셋) → FastAPI·WebSocket → React 대시보드. 엣지 컨트롤러는 라이브 이벤트를 구독해 제어 명령을 링크 너머 장비로 보낸다. replay는 Cold raw에서 bronze로 다시 적재하는 경로다.
 
 ### 데이터 소스 6종
 
@@ -143,15 +143,15 @@ Redpanda는 컨테이너 간 통신용 internal 리스너와 호스트 접속용
 ## 5. 처리 경로 4가지
 
 - **Hot**: 버스 → stream-loader → TimescaleDB `bronze.*` → API·WebSocket 라이브 뷰. 적재 지연 p95를 측정 대상으로 삼는다.
-- **Cold**: 버스 → archiver → MinIO `raw/source=/run_id=/` Parquet. 불변 원본이고, 원본 프레임은 샘플링해 JPEG로 남긴다.
+- **Cold**: 버스 → archiver → SeaweedFS(S3) `raw/source=/run_id=/` Parquet. 불변 원본이고, 원본 프레임은 샘플링해 JPEG로 남긴다.
 - **Batch**: run 종료 → Airflow DAG → bronze 검증 → reference 추론 → dbt silver·gold → 품질 리포트 → 데이터셋 등록.
-- **Replay**: MinIO raw → bronze 재적재 → gold 체크섬 비교. `event_id` 기반 upsert로 멱등성을 보장한다.
+- **Replay**: SeaweedFS(S3) raw → bronze 재적재 → gold 체크섬 비교. `event_id` 기반 upsert로 멱등성을 보장한다.
 
 ## 6. 계층 설계
 
 | 계층 | 위치 | 대표 테이블 | 하는 일 |
 | --- | --- | --- | --- |
-| bronze | Timescale, MinIO | `bronze.frame_sent`, `bronze.link_metrics` | 원본 그대로, 스키마 통과분만 |
+| bronze | Timescale, SeaweedFS(S3) | `bronze.frame_sent`, `bronze.link_metrics` | 원본 그대로, 스키마 통과분만 |
 | silver | Postgres (dbt) | `silver.frames`, `silver.link_1s`, `silver.detections` | 중복 제거, 송수신 프레임 매칭, 1초 버킷 정렬 |
 | gold | Postgres (dbt) | `gold.run_second_features`, `gold.run_summary` | 윈도우 조인, 자동 라벨(network_state), 시나리오 요약 |
 | catalog | Postgres | `meta.runs`, `meta.datasets`, `meta.quality_reports` | run 설정 해시, git SHA, 데이터셋 버전, 품질 결과 |
@@ -172,7 +172,7 @@ Redpanda는 컨테이너 간 통신용 internal 리스너와 호스트 접속용
 | 테스트 | 단위 테스트(브로커 불필요)와 통합 테스트(`@pytest.mark.integration`) 분리. `make test`는 단위만 |
 | 기록 | devlog는 사용자가 직접 기록한다. 채팅 기반 일일 리포트는 초안 자료로만 쓰고 자기 말로 고쳐 쓴다. AI를 쓴 지점은 devlog의 "AI 활용" 칸에 남긴다 |
 
-예정 ADR: 0001 메시지 버스, 0002 프레임 식별, 0003 링크 모드, 0004 추론 디바이스, 0005 프레임 샘플링, 0006 시간 기준, 0007 스키마 진화, 0008 Spark를 쓰지 않은 이유.
+예정 ADR: 0001 메시지 버스, 0002 프레임 식별, 0003 링크 모드, 0004 추론 디바이스, 0005 프레임 샘플링, 0006 시간 기준, 0007 스키마 진화, 0008 Spark를 쓰지 않은 이유, 0009 Cold 저장소(SeaweedFS).
 
 run 리포트(`reports/runs/<run_id>.md`)는 D15부터 DAG가 자동 작성한다: 실행 정보(시나리오, 설정 해시, git SHA, 시작·종료 시각, 링크 모드), 수치(프레임 수, 드롭률, 지연 p50·p95, 검출 일치율, 명령 왕복 지연), 품질(갭, 역전, 중복률, 결측률, DLQ 건수, 판정).
 
