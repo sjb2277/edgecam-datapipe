@@ -13,8 +13,9 @@ down:
 test:
 	uv run pytest -m "not integration"
 
+# .env 값을 export해서 실행한다 (core 프로파일 기동 필요)
 test-integration:
-	uv run pytest -m integration
+	set -a && . ./.env && set +a && uv run pytest -m integration
 
 lint:
 	uv run ruff check .
