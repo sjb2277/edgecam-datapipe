@@ -1,0 +1,36 @@
+[project]
+name = "edgecam-datapipe"
+version = "0.1.0"
+description = "Edge vision data pipeline: camera -> simulated link -> edge inference -> bus -> hot/cold storage"
+readme = "CLAUDE.md"
+requires-python = ">=3.11,<3.12"
+dependencies = []
+
+[build-system]
+requires = ["uv_build>=0.13.6,<0.14"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "pipe"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers"
+markers = [
+    "integration: 브로커 등 외부 서비스가 필요한 통합 테스트 (make test에서 제외)",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit==4.7.0",
+    "pytest==9.2.0",
+    "ruff==0.17.3",
+]
