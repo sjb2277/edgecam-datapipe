@@ -1,0 +1,21 @@
+# env / secrets
+.env
+*.pem
+*.key
+
+# python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# data (원본 데이터는 커밋하지 않음)
+data/
+*.mp4
+*.jpg
+*.png
+!docs/figures/*.png

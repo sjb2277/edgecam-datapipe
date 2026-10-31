@@ -20,7 +20,7 @@
 - Ubuntu, Python 3.11(uv), Docker Compose profiles: core, exp, batch, ops, ran
 - GPU 없음(Intel CPU, OpenVINO), RAM 16GB. 프로파일 동시 기동 조합은 보고 후 결정한다.
 - Redpanda: --memory 1G --smp 1 --overprovisioned (기동 실패 시 --reserve-memory 0M 검토 후 보고)
-- 포트: 컨테이너 내부 Kafka 9092 / Schema Registry 8081, 호스트는 external 19092 / 18081. Postgres 5432, MinIO 9000(콘솔 9001)
+- 포트: 컨테이너 내부 Kafka 9092 / Schema Registry 8081, 호스트는 external 19092 / 18081. Postgres 5432, SeaweedFS S3 9000(Master UI 9333, Filer UI 8888)
 - 이미지 태그와 패키지 버전은 고정한다(latest 금지).
 
 ## 데이터 계약
