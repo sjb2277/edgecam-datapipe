@@ -136,7 +136,7 @@ Redpanda는 컨테이너 간 통신용 internal 리스너와 호스트 접속용
 
 모든 이벤트는 공통 envelope을 달고 버스에 들어간 뒤 Hot, Cold 두 경로로 동시에 저장되고, run이 끝나면 배치가 silver·gold로 정제한다. Cold의 raw Parquet이 원본이라 언제든 재처리할 수 있다.
 
-데이터 흐름: 소스 4계열(카메라 송신, 엣지 수신·추론, 링크 어댑터, 장비 게이트웨이) → Redpanda 버스(Schema Registry, 실패는 DLQ) → Hot 경로(stream-loader → TimescaleDB bronze)와 Cold 경로(archiver → SeaweedFS(S3) Parquet) → 배치 정제(Airflow DAG: pandera 검증 → reference 추론 → dbt silver·gold → 품질 리포트 → DVC 데이터셋) → FastAPI·WebSocket → React 대시보드. 엣지 컨트롤러는 라이브 이벤트를 구독해 제어 명령을 링크 너머 장비로 보낸다. replay는 Cold raw에서 bronze로 다시 적재하는 경로다.
+데이터 흐름: 소스 4계열(카메라 송신, 엣지 수신·추론, 링크 어댑터, 장비 게이트웨이) → Redpanda 버스(Schema Registry, 실패는 DLQ) → Hot 경로(stream-loader → TimescaleDB bronze)와 Cold 경로(archiver → SeaweedFS(S3) Parquet) → 배치 정제(Airflow DAG: pandera 검증 → reference 추론 → dbt silver·gold → 품질 리포트 → DVC 데이터셋) → FastAPI·WebSocket → React 대시보드. 엣지 컨트롤러는 링크 상태를 구독해 송신 파이프라인의 해상도·fps·비트레이트를 조정하는 제어 명령을 보내고, 선택적으로 구역 진입 경보 명령을 ESP32 장비로 보낸다. replay는 Cold raw에서 bronze로 다시 적재하는 경로다.
 
 ### 데이터 소스 6종
 
@@ -147,7 +147,7 @@ Redpanda는 컨테이너 간 통신용 internal 리스너와 호스트 접속용
 | 3 | 링크 지표 | netem 설정값 또는 gNB 통계 로그 | 1초 | `link.metrics` | mode, delay, loss, rate, (rfsim) MCS, BLER |
 | 4 | 네트워크 프로브 | 프로브 스크립트 | 1초 | `net.probe` | rtt, jitter, loss |
 | 5 | 장비 텔레메트리 | ESP32 → device-gateway | 0.5~1초 | `device.telemetry` | distance_cm, servo_angle, led |
-| 6 | 제어 명령·응답 | 컨트롤러, 장비 | 이벤트 | `control.command`, `control.ack` | cmd_id, issued_ts, ack_ts, result |
+| 6 | 제어 명령·응답 | 컨트롤러, 송신 agent(선택: ESP32) | 이벤트 | `control.command`, `control.ack` | cmd_id, issued_ts, ack_ts, result |
 
 ## 4. 데이터 계약
 
@@ -184,7 +184,7 @@ Redpanda는 컨테이너 간 통신용 internal 리스너와 호스트 접속용
 | --- | --- | --- | --- |
 | bronze | Timescale, SeaweedFS(S3) | `bronze.frame_sent`, `bronze.link_metrics` | 원본 그대로, 스키마 통과분만 |
 | silver | Postgres (dbt) | `silver.frames`, `silver.link_1s`, `silver.detections` | 중복 제거, 송수신 프레임 매칭, 1초 버킷 정렬 |
-| gold | Postgres (dbt) | `gold.run_second_features`, `gold.run_summary` | 윈도우 조인, 자동 라벨(network_state), 시나리오 요약 |
+| gold | Postgres (dbt) | `gold.run_second_features`, `gold.run_summary`, `gold.zone_events` | 윈도우 조인, 자동 라벨(network_state), 구역 이벤트 계산, 시나리오 요약 |
 | catalog | Postgres | `meta.runs`, `meta.datasets`, `meta.quality_reports` | run 설정 해시, git SHA, 데이터셋 버전, 품질 결과 |
 
 송수신 프레임은 RTP 타임스탬프를 키로 매칭한다. 영상 스트림 안에 seq를 심지 않아도 되고, 송신·수신이 같은 노트북 시계를 쓰니 프레임 단위 지연이 정확하게 나온다(데스크탑을 쓰면 시간 동기가 필요하다).
@@ -217,7 +217,7 @@ N, Δ, 구역 모양은 본인이 설계하고 ADR-0010에 남긴다. 측정 run
 
 예정 ADR: 0001 메시지 버스, 0002 프레임 식별, 0003 링크 모드, 0004 추론 디바이스, 0005 프레임 샘플링, 0006 시간 기준, 0007 스키마 진화, 0008 Spark를 쓰지 않은 이유, 0009 Cold 저장소(SeaweedFS), 0010 이벤트 정의와 정답 기준, 0011 적응 정책 설계(규칙 기반, 히스테리시스).
 
-run 리포트(`reports/runs/<run_id>.md`)는 D15부터 DAG가 자동 작성한다: 실행 정보(시나리오, 설정 해시, git SHA, 시작·종료 시각, 링크 모드), 수치(프레임 수, 드롭률, 지연 p50·p95, 검출 일치율, 명령 왕복 지연), 품질(갭, 역전, 중복률, 결측률, DLQ 건수, 판정).
+run 리포트(`reports/runs/<run_id>.md`)는 D15부터 DAG가 자동 작성한다: 실행 정보(시나리오, 설정 해시, git SHA, 시작·종료 시각, 링크 모드), 수치(프레임 수, 드롭률, 지연 p50·p95, 검출 일치율, 명령 왕복 지연, 구역 진입 검출률, 놓친 이벤트·오경보 수, 감지 지연), 품질(갭, 역전, 중복률, 결측률, DLQ 건수, 판정).
 
 ## 역할 구분: 내가 설계 / Claude Code 구현
 
