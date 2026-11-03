@@ -279,6 +279,17 @@ class Sender:
         return 1 if self.meta["errors"] else 0
 
 
+def apply_overrides(cfg: CaptureConfig, args: argparse.Namespace) -> CaptureConfig:
+    """CLI 인자로 .env 값을 덮어쓴다(.env 로드가 환경변수를 덮으므로 CLI로 받는다)."""
+    from dataclasses import replace
+
+    if args.bitrate is not None:
+        cfg = replace(cfg, bitrate_kbps=args.bitrate)
+    if args.host is not None:
+        cfg = replace(cfg, rtp_host=args.host)
+    return cfg
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="RTP/UDP 프레임 송신")
     p.add_argument("--mode", choices=["webcam", "clip", "test"], required=True)
@@ -287,13 +298,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--schedule", default="", help="예: 20:bitrate=500,40:caps=320x240@15")
     p.add_argument("--bitrate", type=int, default=None, help="초기 비트레이트 kbps(덮어쓰기)")
     p.add_argument("--test-pattern", default="ball", help="test 모드 videotestsrc 패턴")
+    p.add_argument("--host", default=None, help="RTP 목적지 주소(RTP_HOST 덮어쓰기, netns용)")
     args = p.parse_args(argv)
 
-    cfg = CaptureConfig.from_env()
-    if args.bitrate is not None:
-        from dataclasses import replace
-
-        cfg = replace(cfg, bitrate_kbps=args.bitrate)
+    cfg = apply_overrides(CaptureConfig.from_env(), args)
     if args.mode == "clip" and not cfg.clip_path.exists():
         print(f"[sender] clip not found: {cfg.clip_path}", file=sys.stderr)
         return 2

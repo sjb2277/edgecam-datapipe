@@ -1,0 +1,7 @@
+name: delay
+description: 지연 100ms, 지터 없음
+segments:
+  - from_s: 0
+    to_s: null
+    delay_ms: 100
+    jitter_ms: 0

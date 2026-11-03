@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "Edge vision data pipeline: camera -> simulated link -> edge inference -> bus -> hot/cold storage"
 readme = "CLAUDE.md"
 requires-python = ">=3.11,<3.12"
-dependencies = []
+dependencies = [
+    "pyyaml==6.0.3",
+]
 
 [build-system]
 requires = ["uv_build>=0.13.6,<0.14"]
@@ -26,6 +28,7 @@ testpaths = ["tests"]
 addopts = "--strict-markers"
 markers = [
     "integration: 브로커 등 외부 서비스가 필요한 통합 테스트 (make test에서 제외)",
+    "netns: ip netns·tc와 sudo가 필요한 테스트 (integration과 함께 표시, CI 제외)",
 ]
 
 [dependency-groups]
