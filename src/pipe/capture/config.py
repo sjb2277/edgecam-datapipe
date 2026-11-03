@@ -41,6 +41,9 @@ class CaptureConfig:
     vbv_buf_ms: int = 300
     mtu: int = 1400
     jitter_latency_ms: int = 50
+    # udpsrc buffer-size(SO_RCVBUF 요청값, bytes). 0이면 OS 기본값.
+    # 커널은 2배로 보고하고 rmem_max로 제한한다.
+    recv_buffer_bytes: int = 8_388_608
     runs_dir: Path = Path("data/runs")
 
     @classmethod
@@ -69,6 +72,7 @@ class CaptureConfig:
             vbv_buf_ms=i("X264_VBV_BUF_MS", d.vbv_buf_ms),
             mtu=i("RTP_MTU", d.mtu),
             jitter_latency_ms=i("JITTER_LATENCY_MS", d.jitter_latency_ms),
+            recv_buffer_bytes=i("RTP_RECV_BUFFER_BYTES", d.recv_buffer_bytes),
             runs_dir=Path(s("RUNS_DIR", str(d.runs_dir))),
         )
 
