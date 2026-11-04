@@ -1,0 +1,6 @@
+name: loss
+description: 무작위 패킷 손실 2%
+segments:
+  - from_s: 0
+    to_s: null
+    loss_pct: 2

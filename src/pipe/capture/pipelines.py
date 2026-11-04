@@ -66,8 +66,9 @@ def sender_pipeline(cfg: CaptureConfig, mode: Mode, test_pattern: str = "ball") 
 
 
 def receiver_pipeline(cfg: CaptureConfig) -> str:
+    buf = f" buffer-size={cfg.recv_buffer_bytes}" if cfg.recv_buffer_bytes > 0 else ""
     return (
-        f'udpsrc name=src port={cfg.rtp_port} caps="{RTP_CAPS}"'
+        f'udpsrc name=src port={cfg.rtp_port}{buf} caps="{RTP_CAPS}"'
         f" ! rtpjitterbuffer name=jbuf latency={cfg.jitter_latency_ms}"
         " ! rtph264depay name=depay ! h264parse"
         " ! avdec_h264 name=dec thread-type=slice"

@@ -2,7 +2,7 @@ import struct
 
 import pytest
 
-from pipe.capture.rtp import FrameAccumulator, parse_rtp_header, unwrap
+from pipe.capture.rtp import FrameAccumulator, parse_rtp_header, seq_before, unwrap
 
 
 def pkt(seq: int, ts: int, marker: bool = False, ssrc: int = 0x1234, pt: int = 96) -> bytes:
@@ -61,3 +61,29 @@ def test_accumulator_separates_ssrc():
     acc.add(parse_rtp_header(pkt(1, 100, ssrc=1)), 10, 1)
     assert acc.add(parse_rtp_header(pkt(1, 100, ssrc=2)), 10, 2) == []
     assert len(acc.flush()) == 2
+
+
+def test_seq_before_wraps():
+    assert seq_before(1, 2) and not seq_before(2, 1) and not seq_before(5, 5)
+    assert seq_before(65535, 0) and not seq_before(0, 65535)
+
+
+def test_accumulator_reordered_packets_keep_seq_range():
+    acc = FrameAccumulator()
+    acc.add(parse_rtp_header(pkt(65535, 100)), 10, 1)
+    acc.add(parse_rtp_header(pkt(1, 100, marker=False)), 10, 2)
+    (f,) = acc.add(parse_rtp_header(pkt(0, 100, marker=True)), 10, 3)
+    assert (f.seq_first, f.seq_last, f.packets) == (65535, 1, 3)
+
+
+def test_late_packet_reopens_frame_and_merges():
+    acc = FrameAccumulator()
+    acc.add(parse_rtp_header(pkt(10, 100)), 10, 1)
+    (first,) = acc.add(parse_rtp_header(pkt(12, 3100)), 10, 2)  # 다음 프레임이 먼저 옴
+    # 늦은 패킷: 열려 있던 3100을 닫고 100을 다시 돌려준다(둘 다 호출 측이 키로 merge)
+    done = acc.add(parse_rtp_header(pkt(11, 100, marker=True)), 10, 3)
+    assert [f.rtp_ts for f in done] == [3100, 100]
+    late = done[1]
+    first.merge(late)
+    assert (first.packets, first.seq_first, first.seq_last) == (2, 10, 11)
+    assert (first.first_mono_ns, first.last_mono_ns, first.marker_seen) == (1, 3, True)

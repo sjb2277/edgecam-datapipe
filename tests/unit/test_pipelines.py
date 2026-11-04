@@ -47,6 +47,13 @@ def test_receiver_pipeline():
     assert p.startswith("udpsrc name=src port=5006")
     assert "rtpjitterbuffer name=jbuf latency=50" in p
     assert "avdec_h264 name=dec thread-type=slice" in p
+    assert "buffer-size=8388608" in p
+
+
+def test_receiver_buffer_size_from_env_and_zero_omits():
+    cfg = CaptureConfig.from_env({"RTP_RECV_BUFFER_BYTES": "4194304"})
+    assert " buffer-size=4194304 " in receiver_pipeline(cfg)
+    assert "buffer-size" not in receiver_pipeline(CaptureConfig(recv_buffer_bytes=0))
 
 
 def test_record_clip_pipeline():

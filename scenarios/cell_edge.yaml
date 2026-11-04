@@ -1,0 +1,9 @@
+# 시계열 프로파일 예시(형식 정의용, D03에서는 run 미승인).
+# 셀 중심 → 가장자리 → 복귀를 계단식 구간으로 모사한다. 값은 형식 예시이며 측정 근거 없음.
+name: cell_edge
+description: 셀 가장자리 이동 모사(계단식)
+segments:
+  - {from_s: 0,  to_s: 20,   delay_ms: 20,  jitter_ms: 5,  loss_pct: 0,   rate_kbps: 20000}
+  - {from_s: 20, to_s: 40,   delay_ms: 60,  jitter_ms: 15, loss_pct: 1,   rate_kbps: 5000}
+  - {from_s: 40, to_s: 60,   delay_ms: 120, jitter_ms: 30, loss_pct: 5,   rate_kbps: 1500}
+  - {from_s: 60, to_s: null, delay_ms: 20,  jitter_ms: 5,  loss_pct: 0,   rate_kbps: 20000}

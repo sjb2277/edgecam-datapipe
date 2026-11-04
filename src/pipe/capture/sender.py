@@ -8,6 +8,7 @@
   ssrc, rtp_ts, rtp_seq_first/last, packets, bytes(RTP 패킷 크기 합)
 
 이 모듈의 Gst 헬퍼(init, iter_buffers, rtp_header_of, caps_size)는 receiver도 쓴다.
+gi 없는 CLI 덮어쓰기(apply_overrides)는 config.py에 있다(단위 테스트가 gi 없이 import).
 
 실행: uv run python -m pipe.capture.sender --mode clip --run-id <id> --duration 60
 """
@@ -26,7 +27,7 @@ gi.require_version("Gst", "1.0")
 from gi.repository import GLib, Gst  # noqa: E402
 
 from pipe.capture import config as rec  # noqa: E402
-from pipe.capture.config import CaptureConfig  # noqa: E402
+from pipe.capture.config import CaptureConfig, apply_overrides  # noqa: E402
 from pipe.capture.knobs import KnobEvent, parse_schedule  # noqa: E402
 from pipe.capture.pipelines import Mode, raw_caps, sender_pipeline  # noqa: E402
 from pipe.capture.rtp import FrameAccumulator, RtpHeader, parse_rtp_header  # noqa: E402
@@ -287,13 +288,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--schedule", default="", help="예: 20:bitrate=500,40:caps=320x240@15")
     p.add_argument("--bitrate", type=int, default=None, help="초기 비트레이트 kbps(덮어쓰기)")
     p.add_argument("--test-pattern", default="ball", help="test 모드 videotestsrc 패턴")
+    p.add_argument("--host", default=None, help="RTP 목적지 주소(RTP_HOST 덮어쓰기, netns용)")
     args = p.parse_args(argv)
 
-    cfg = CaptureConfig.from_env()
-    if args.bitrate is not None:
-        from dataclasses import replace
-
-        cfg = replace(cfg, bitrate_kbps=args.bitrate)
+    cfg = apply_overrides(CaptureConfig.from_env(), args)
     if args.mode == "clip" and not cfg.clip_path.exists():
         print(f"[sender] clip not found: {cfg.clip_path}", file=sys.stderr)
         return 2

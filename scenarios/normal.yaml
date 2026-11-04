@@ -1,0 +1,5 @@
+name: normal
+description: 정상(열화 없음). netem은 통과 상태로 둔다.
+segments:
+  - from_s: 0
+    to_s: null
