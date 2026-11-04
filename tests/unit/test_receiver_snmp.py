@@ -1,4 +1,4 @@
-from pipe.capture.receiver import read_udp_snmp, snmp_delta
+from pipe.capture.recv_diag import read_udp_snmp, snmp_delta
 
 SNMP = """Ip: Forwarding DefaultTTL
 Ip: 1 64

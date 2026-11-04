@@ -8,6 +8,7 @@
   ssrc, rtp_ts, rtp_seq_first/last, packets, bytes(RTP 패킷 크기 합)
 
 이 모듈의 Gst 헬퍼(init, iter_buffers, rtp_header_of, caps_size)는 receiver도 쓴다.
+gi 없는 CLI 덮어쓰기(apply_overrides)는 config.py에 있다(단위 테스트가 gi 없이 import).
 
 실행: uv run python -m pipe.capture.sender --mode clip --run-id <id> --duration 60
 """
@@ -26,7 +27,7 @@ gi.require_version("Gst", "1.0")
 from gi.repository import GLib, Gst  # noqa: E402
 
 from pipe.capture import config as rec  # noqa: E402
-from pipe.capture.config import CaptureConfig  # noqa: E402
+from pipe.capture.config import CaptureConfig, apply_overrides  # noqa: E402
 from pipe.capture.knobs import KnobEvent, parse_schedule  # noqa: E402
 from pipe.capture.pipelines import Mode, raw_caps, sender_pipeline  # noqa: E402
 from pipe.capture.rtp import FrameAccumulator, RtpHeader, parse_rtp_header  # noqa: E402
@@ -277,17 +278,6 @@ class Sender:
             flush=True,
         )
         return 1 if self.meta["errors"] else 0
-
-
-def apply_overrides(cfg: CaptureConfig, args: argparse.Namespace) -> CaptureConfig:
-    """CLI 인자로 .env 값을 덮어쓴다(.env 로드가 환경변수를 덮으므로 CLI로 받는다)."""
-    from dataclasses import replace
-
-    if args.bitrate is not None:
-        cfg = replace(cfg, bitrate_kbps=args.bitrate)
-    if args.host is not None:
-        cfg = replace(cfg, rtp_host=args.host)
-    return cfg
 
 
 def main(argv: list[str] | None = None) -> int:

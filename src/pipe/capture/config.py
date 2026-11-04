@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import threading
@@ -127,3 +128,14 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
 
 def default_run_id(prefix: str = "d02") -> str:
     return f"{prefix}-{time.strftime('%Y%m%dT%H%M%S')}"
+
+
+def apply_overrides(cfg: CaptureConfig, args: argparse.Namespace) -> CaptureConfig:
+    """CLI 인자로 .env 값을 덮어쓴다(.env 로드가 환경변수를 덮으므로 CLI로 받는다)."""
+    from dataclasses import replace
+
+    if args.bitrate is not None:
+        cfg = replace(cfg, bitrate_kbps=args.bitrate)
+    if args.host is not None:
+        cfg = replace(cfg, rtp_host=args.host)
+    return cfg

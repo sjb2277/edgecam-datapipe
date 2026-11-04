@@ -2,8 +2,7 @@ import argparse
 import uuid
 
 from pipe.capture import config as rec
-from pipe.capture.config import CaptureConfig
-from pipe.capture.sender import apply_overrides
+from pipe.capture.config import CaptureConfig, apply_overrides
 from pipe.link.metrics import link_metrics_record
 from pipe.link.runner import META_FILE, METRICS_FILE, LinkConfig, run
 from pipe.link.scenario import Segment, parse_scenario

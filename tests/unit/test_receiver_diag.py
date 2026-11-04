@@ -1,6 +1,6 @@
 import pytest
 
-from pipe.capture.receiver import (
+from pipe.capture.recv_diag import (
     CLOCK_TIME_NONE,
     GST_DEBUG_MAX_BYTES,
     CappedLog,
